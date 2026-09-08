@@ -228,6 +228,12 @@ async def scorpio_feed_asset(path: str, request: Request):
     return await _proxy_mosdac(f"{_MOSDAC_BASE}/{path}", request)
 
 
+@app.get("/common/{path:path}", include_in_schema=False)
+async def mosdac_common_asset(path: str, request: Request):
+    """Proxy MOSDAC shared common assets (/common/js/purify.min.js, etc.)."""
+    return await _proxy_mosdac(f"{_MOSDAC_ORIGIN}/common/{path}", request)
+
+
 # ── Frontend Static File Serving ──────────────────────────────────────────────
 # Arnav's HTML portal lives in <repo_root>/frontend/.
 # FastAPI serves it on the same port 8000 — zero CORS, single unified server.
