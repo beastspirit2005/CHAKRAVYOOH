@@ -83,62 +83,124 @@ async def readiness_check():
 # The God's Eye frontend embeds MOSDAC SCORPIO via iframes at /scorpio_feed.
 # mosdac.gov.in sets X-Frame-Options: SAMEORIGIN which blocks direct embedding.
 # This proxy fetches the upstream page server-side and strips those headers,
-# so the iframe receives a clean HTML response it can render.
-#
-# Supported sub-paths: /scorpio_feed (root), /scorpio_feed/{path} (assets)
+# AND rewrites all internal URLs so every sub-asset (JS, CSS, tiles, images)
+# also flows through /scorpio_feed/ — nothing goes directly to mosdac.gov.in.
 # ──────────────────────────────────────────────────────────────────────────
 
+import re as _re
 import httpx
 from fastapi import Request
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import Response
 
 _MOSDAC_BASE = "https://mosdac.gov.in/scorpio"
+_MOSDAC_ORIGIN = "https://mosdac.gov.in"
 _STRIP_HEADERS = {
     "x-frame-options", "content-security-policy",
     "x-content-type-options", "strict-transport-security",
+    "content-encoding",  # we decode before rewriting; don't lie about encoding
 }
-_PROXY_TIMEOUT = 15.0
+_PROXY_TIMEOUT = 20.0
+_TEXT_TYPES = ("text/html", "text/javascript", "application/javascript", "text/css", "application/json")
+
+
+def _rewrite_urls(text: str) -> str:
+    """
+    Replace every reference to mosdac.gov.in/scorpio with /scorpio_feed
+    so all sub-assets (JS, CSS, WMS tile URLs, fonts, images) are fetched
+    through our proxy and inherit its permissive CORS/frame headers.
+    """
+    # Absolute https/http
+    text = text.replace("https://mosdac.gov.in/scorpio/", "/scorpio_feed/")
+    text = text.replace("https://mosdac.gov.in/scorpio",  "/scorpio_feed")
+    text = text.replace("http://mosdac.gov.in/scorpio/",  "/scorpio_feed/")
+    text = text.replace("http://mosdac.gov.in/scorpio",   "/scorpio_feed")
+
+    # Root-relative /scorpio/* paths (inside quotes, parens, or after =)
+    text = text.replace('"/scorpio/',  '"/scorpio_feed/')
+    text = text.replace("'/scorpio/",  "'/scorpio_feed/")
+    text = text.replace('(/scorpio/',  '(/scorpio_feed/')
+    text = text.replace('=/scorpio/',  '=/scorpio_feed/')
+    text = text.replace('url(/scorpio/', 'url(/scorpio_feed/')
+
+    # Fix <base href> so the browser resolves relative imports through our proxy
+    text = _re.sub(
+        r'<base\s+href=["\'][^"\']*["\']',
+        '<base href="/scorpio_feed/">',
+        text,
+        flags=_re.IGNORECASE,
+    )
+    return text
 
 
 async def _proxy_mosdac(upstream_url: str, request: Request) -> Response:
-    """Fetch upstream URL, strip embedding-hostile headers, return to browser."""
+    """Fetch upstream URL, strip frame/CORS-hostile headers, rewrite URLs, return to browser."""
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=_PROXY_TIMEOUT) as client:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (compatible; PukarProxy/1.0)",
+            upstream_headers = {
+                "User-Agent": "Mozilla/5.0 (compatible; PukarProxy/1.0; ISRO-CHAKRAVYOOH)",
                 "Accept": request.headers.get("accept", "*/*"),
                 "Accept-Language": "en-US,en;q=0.9",
                 "Referer": "https://mosdac.gov.in/",
+                "Accept-Encoding": "identity",   # disable gzip so we can rewrite text cleanly
             }
-            resp = await client.get(upstream_url, headers=headers)
-            # Strip headers that would block iframe embedding
+            resp = await client.get(upstream_url, headers=upstream_headers)
+
+            # Build clean response headers
             clean_headers = {
                 k: v for k, v in resp.headers.items()
                 if k.lower() not in _STRIP_HEADERS
             }
-            # Inject permissive framing header
             clean_headers["X-Frame-Options"] = "ALLOWALL"
+            clean_headers["Access-Control-Allow-Origin"] = "*"
+            clean_headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+
+            content_type = resp.headers.get("content-type", "text/html")
+            content = resp.content
+
+            # URL-rewrite text responses so every sub-asset routes through our proxy
+            if any(t in content_type for t in _TEXT_TYPES):
+                try:
+                    text = content.decode("utf-8", errors="replace")
+                    text = _rewrite_urls(text)
+                    content = text.encode("utf-8")
+                    # Remove stale content-length; FastAPI will recalculate
+                    clean_headers.pop("content-length", None)
+                    clean_headers.pop("Content-Length", None)
+                except Exception as rw_err:
+                    logger.warning("MOSDAC URL rewrite error: %s", rw_err)
+
             return Response(
-                content=resp.content,
+                content=content,
                 status_code=resp.status_code,
                 headers=clean_headers,
-                media_type=resp.headers.get("content-type", "text/html"),
+                media_type=content_type,
             )
+
     except httpx.TimeoutException:
-        logger.warning("MOSDAC proxy timeout for %s", upstream_url)
+        logger.warning("MOSDAC proxy timeout → %s", upstream_url)
         return Response(
-            content="<html><body style='background:#0a0f1e;color:#64748b;font-family:monospace;padding:2rem'>"
-                    "<h2>⚡ MOSDAC SCORPIO — Feed Temporarily Unavailable</h2>"
-                    "<p>The ISRO MOSDAC server did not respond in time. Retrying…</p>"
-                    "<script>setTimeout(()=>location.reload(),8000)</script></body></html>",
+            content=(
+                "<html><body style='background:#0a0f1e;color:#64748b;"
+                "font-family:monospace;display:flex;align-items:center;"
+                "justify-content:center;height:100vh;flex-direction:column;gap:1rem'>"
+                "<div style='font-size:2rem'>⚡</div>"
+                "<h2 style='margin:0'>MOSDAC SCORPIO — Feed Temporarily Unavailable</h2>"
+                "<p style='color:#475569'>ISRO server did not respond. Auto-retrying in 8s…</p>"
+                "<script>setTimeout(()=>location.reload(),8000)</script>"
+                "</body></html>"
+            ),
             status_code=504,
             media_type="text/html",
         )
     except Exception as e:
         logger.error("MOSDAC proxy error: %s", e)
         return Response(
-            content="<html><body style='background:#0a0f1e;color:#ef4444;font-family:monospace;padding:2rem'>"
-                    f"<h2>MOSDAC Proxy Error</h2><p>{str(e)[:200]}</p></body></html>",
+            content=(
+                "<html><body style='background:#0a0f1e;color:#ef4444;"
+                "font-family:monospace;padding:2rem'>"
+                f"<h2>MOSDAC Proxy Error</h2><pre>{str(e)[:300]}</pre>"
+                "</body></html>"
+            ),
             status_code=502,
             media_type="text/html",
         )
@@ -146,13 +208,13 @@ async def _proxy_mosdac(upstream_url: str, request: Request) -> Response:
 
 @app.get("/scorpio_feed", include_in_schema=False)
 async def scorpio_feed_root(request: Request):
-    """Proxy root MOSDAC SCORPIO page — embedded by God's Eye iframes."""
+    """Proxy MOSDAC SCORPIO root page with full URL rewriting."""
     return await _proxy_mosdac(_MOSDAC_BASE + "/", request)
 
 
 @app.get("/scorpio_feed/{path:path}", include_in_schema=False)
 async def scorpio_feed_asset(path: str, request: Request):
-    """Proxy MOSDAC SCORPIO sub-paths (JS, CSS, tiles, images)."""
+    """Proxy all MOSDAC SCORPIO sub-assets (JS, CSS, WMS tiles, images) with URL rewriting."""
     return await _proxy_mosdac(f"{_MOSDAC_BASE}/{path}", request)
 
 
