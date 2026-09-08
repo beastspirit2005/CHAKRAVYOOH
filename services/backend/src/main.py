@@ -134,6 +134,18 @@ def _rewrite_urls(text: str) -> str:
     text = text.replace("http://mosdac.gov.in/scorpio/",  "/scorpio_feed/")
     text = text.replace("http://mosdac.gov.in/scorpio",   "/scorpio_feed")
 
+    # Geoserver 2 tile server (fixes CORS for WMS tiles)
+    text = text.replace("https://mosdac.gov.in/geoserver_2", "/geoserver_2")
+    text = text.replace("http://mosdac.gov.in/geoserver_2",  "/geoserver_2")
+    text = text.replace("https://www.mosdac.gov.in/geoserver_2", "/geoserver_2")
+    text = text.replace("http://www.mosdac.gov.in/geoserver_2",  "/geoserver_2")
+
+    # Live data endpoint (fixes CORS for WMS live data)
+    text = text.replace("https://mosdac.gov.in/live_data", "/live_data")
+    text = text.replace("http://mosdac.gov.in/live_data",  "/live_data")
+    text = text.replace("https://www.mosdac.gov.in/live_data", "/live_data")
+    text = text.replace("http://www.mosdac.gov.in/live_data",  "/live_data")
+
     # Root-relative /scorpio/* paths (inside quotes, parens, or after =)
     text = text.replace('"/scorpio/',  '"/scorpio_feed/')
     text = text.replace("'/scorpio/",  "'/scorpio_feed/")
@@ -153,6 +165,9 @@ def _rewrite_urls(text: str) -> str:
 
 async def _proxy_mosdac(upstream_url: str, request: Request) -> Response:
     """Fetch upstream URL, strip frame/CORS-hostile headers, rewrite URLs, return to browser."""
+    if request.url.query:
+        separator = "&" if "?" in upstream_url else "?"
+        upstream_url = f"{upstream_url}{separator}{request.url.query}"
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=_PROXY_TIMEOUT) as client:
             upstream_headers = {
@@ -241,6 +256,18 @@ async def scorpio_feed_asset(path: str, request: Request):
 async def mosdac_common_asset(path: str, request: Request):
     """Proxy MOSDAC shared common assets (/common/js/purify.min.js, etc.)."""
     return await _proxy_mosdac(f"{_MOSDAC_ORIGIN}/common/{path}", request)
+
+
+@app.get("/geoserver_2/{path:path}", include_in_schema=False)
+async def mosdac_geoserver_proxy(path: str, request: Request):
+    """Proxy MOSDAC GeoServer WMS map tiles with permissive CORS."""
+    return await _proxy_mosdac(f"{_MOSDAC_ORIGIN}/geoserver_2/{path}", request)
+
+
+@app.get("/live_data/{path:path}", include_in_schema=False)
+async def mosdac_livedata_proxy(path: str, request: Request):
+    """Proxy MOSDAC live data WMS layers with permissive CORS."""
+    return await _proxy_mosdac(f"{_MOSDAC_ORIGIN}/live_data/{path}", request)
 
 
 # ── Frontend Static File Serving ──────────────────────────────────────────────
