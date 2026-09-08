@@ -79,6 +79,83 @@ async def readiness_check():
     return {"status": "ready"}
 
 
+# ── MOSDAC SCORPIO Live Satellite Feed Proxy ───────────────────────────────
+# The God's Eye frontend embeds MOSDAC SCORPIO via iframes at /scorpio_feed.
+# mosdac.gov.in sets X-Frame-Options: SAMEORIGIN which blocks direct embedding.
+# This proxy fetches the upstream page server-side and strips those headers,
+# so the iframe receives a clean HTML response it can render.
+#
+# Supported sub-paths: /scorpio_feed (root), /scorpio_feed/{path} (assets)
+# ──────────────────────────────────────────────────────────────────────────
+
+import httpx
+from fastapi import Request
+from fastapi.responses import Response, StreamingResponse
+
+_MOSDAC_BASE = "https://mosdac.gov.in/scorpio"
+_STRIP_HEADERS = {
+    "x-frame-options", "content-security-policy",
+    "x-content-type-options", "strict-transport-security",
+}
+_PROXY_TIMEOUT = 15.0
+
+
+async def _proxy_mosdac(upstream_url: str, request: Request) -> Response:
+    """Fetch upstream URL, strip embedding-hostile headers, return to browser."""
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=_PROXY_TIMEOUT) as client:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (compatible; PukarProxy/1.0)",
+                "Accept": request.headers.get("accept", "*/*"),
+                "Accept-Language": "en-US,en;q=0.9",
+                "Referer": "https://mosdac.gov.in/",
+            }
+            resp = await client.get(upstream_url, headers=headers)
+            # Strip headers that would block iframe embedding
+            clean_headers = {
+                k: v for k, v in resp.headers.items()
+                if k.lower() not in _STRIP_HEADERS
+            }
+            # Inject permissive framing header
+            clean_headers["X-Frame-Options"] = "ALLOWALL"
+            return Response(
+                content=resp.content,
+                status_code=resp.status_code,
+                headers=clean_headers,
+                media_type=resp.headers.get("content-type", "text/html"),
+            )
+    except httpx.TimeoutException:
+        logger.warning("MOSDAC proxy timeout for %s", upstream_url)
+        return Response(
+            content="<html><body style='background:#0a0f1e;color:#64748b;font-family:monospace;padding:2rem'>"
+                    "<h2>⚡ MOSDAC SCORPIO — Feed Temporarily Unavailable</h2>"
+                    "<p>The ISRO MOSDAC server did not respond in time. Retrying…</p>"
+                    "<script>setTimeout(()=>location.reload(),8000)</script></body></html>",
+            status_code=504,
+            media_type="text/html",
+        )
+    except Exception as e:
+        logger.error("MOSDAC proxy error: %s", e)
+        return Response(
+            content="<html><body style='background:#0a0f1e;color:#ef4444;font-family:monospace;padding:2rem'>"
+                    f"<h2>MOSDAC Proxy Error</h2><p>{str(e)[:200]}</p></body></html>",
+            status_code=502,
+            media_type="text/html",
+        )
+
+
+@app.get("/scorpio_feed", include_in_schema=False)
+async def scorpio_feed_root(request: Request):
+    """Proxy root MOSDAC SCORPIO page — embedded by God's Eye iframes."""
+    return await _proxy_mosdac(_MOSDAC_BASE + "/", request)
+
+
+@app.get("/scorpio_feed/{path:path}", include_in_schema=False)
+async def scorpio_feed_asset(path: str, request: Request):
+    """Proxy MOSDAC SCORPIO sub-paths (JS, CSS, tiles, images)."""
+    return await _proxy_mosdac(f"{_MOSDAC_BASE}/{path}", request)
+
+
 # ── Frontend Static File Serving ──────────────────────────────────────────────
 # Arnav's HTML portal lives in <repo_root>/frontend/.
 # FastAPI serves it on the same port 8000 — zero CORS, single unified server.
