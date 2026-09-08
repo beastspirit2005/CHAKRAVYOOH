@@ -1,6 +1,15 @@
 import logging
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+# Ensure services/backend is in sys.path when deployed on Vercel
+_BACKEND_DIR = Path(__file__).resolve().parent.parent
+if str(_BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_DIR))
+_SRC_DIR = _BACKEND_DIR / "src"
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
