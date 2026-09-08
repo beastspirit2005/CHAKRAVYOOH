@@ -1,4 +1,4 @@
-﻿"""
+"""
 Tests -- Alert Versioning and Lifecycle (Master PRD S20, S21)
 Verifies version increment and ACTIVE -> SUPERSEDED state transitions.
 """

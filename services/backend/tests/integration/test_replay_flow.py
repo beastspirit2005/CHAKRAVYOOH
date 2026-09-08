@@ -1,4 +1,4 @@
-﻿"""
+"""
 Tests -- Demo Replay Engine (Master PRD S42)
 Verifies the 4-frame Amphan replay builds correct intelligence payloads.
 """

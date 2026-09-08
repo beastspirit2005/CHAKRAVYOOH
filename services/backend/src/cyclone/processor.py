@@ -1,4 +1,4 @@
-﻿"""
+"""
 Chakravyooh Cyclone Intelligence Processor
 Decoupled from router to prevent circular imports with replay engine.
 """
