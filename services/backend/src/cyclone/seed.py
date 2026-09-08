@@ -1,6 +1,7 @@
+import bcrypt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.database.models import Zone, ZoneStatus
+from src.database.models import Zone, ZoneStatus, User, RoleEnum
 
 async def seed_demo_zones(db: AsyncSession):
     """
