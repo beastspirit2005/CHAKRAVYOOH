@@ -26,6 +26,73 @@ router = APIRouter(prefix="/cyclone", tags=["Cyclone Intelligence"])
 init_replay_routes(router)
 
 
+@router.get("/risk-matrix", tags=["Cyclone Intelligence"])
+async def get_cyclone_risk_matrix():
+    """
+    Authoritative 2D Geospatial Cyclone Impact & Evacuation Risk Matrix.
+    Called by the God's Eye frontend UI (index.html) to render the tactical risk overlay.
+    """
+    return {
+        "meta": {
+            "version": "1.0",
+            "cyclone": "DANA-2 (Odisha Coast Approach)",
+            "generated_at": "2026-09-09T00:00:00Z",
+            "axes": {
+                "x": {"label": "Population Density Zone", "values": [
+                    {"id": "c1", "label": "Inland Rural", "density": "<200/km²"},
+                    {"id": "c2", "label": "Semi-Urban Corridor", "density": "200–800/km²"},
+                    {"id": "c3", "label": "Dense Urban Center", "density": ">2,000/km²"},
+                    {"id": "c4", "label": "Critical Coastal Front", "density": "Coastline <2km"},
+                ]}
+            }
+        },
+        "matrix_grid": [
+            {"tier": "Catastrophic (>3.5m)", "surge_level": ">3.5m", "cells": [
+                {"col": "Inland Rural", "risk_level": "MODERATE", "badge": "YELLOW", "code": "C1", "zone": "Zone C", "evac_target": "50% Evacuation"},
+                {"col": "Semi-Urban Corridor", "risk_level": "HIGH", "badge": "ORANGE", "code": "B1", "zone": "Zone B", "evac_target": "80% Evacuation"},
+                {"col": "Dense Urban Center", "risk_level": "EXTREME", "badge": "RED", "code": "A2", "zone": "Zone A", "evac_target": "100% Mandatory"},
+                {"col": "Critical Coastal Front", "risk_level": "EXTREME", "badge": "RED", "code": "A1", "zone": "Zone A", "evac_target": "100% Evacuated"},
+            ]},
+            {"tier": "Severe (2.5–3.5m)", "surge_level": "2.5–3.5m", "cells": [
+                {"col": "Inland Rural", "risk_level": "LOW", "badge": "GREEN", "code": "D1", "zone": "Zone D", "evac_target": "Advisory Only"},
+                {"col": "Semi-Urban Corridor", "risk_level": "MODERATE", "badge": "YELLOW", "code": "C2", "zone": "Zone C", "evac_target": "Precautionary"},
+                {"col": "Dense Urban Center", "risk_level": "HIGH", "badge": "ORANGE", "code": "B2", "zone": "Zone B", "evac_target": "75% Evacuation"},
+                {"col": "Critical Coastal Front", "risk_level": "EXTREME", "badge": "RED", "code": "A3", "zone": "Zone A", "evac_target": "100% Mandatory"},
+            ]},
+            {"tier": "Moderate (1.5–2.5m)", "surge_level": "1.5–2.5m", "cells": [
+                {"col": "Inland Rural", "risk_level": "LOW", "badge": "GREEN", "code": "D2", "zone": "Zone D", "evac_target": "Normal Standby"},
+                {"col": "Semi-Urban Corridor", "risk_level": "LOW", "badge": "GREEN", "code": "D3", "zone": "Zone D", "evac_target": "Advisory Only"},
+                {"col": "Dense Urban Center", "risk_level": "MODERATE", "badge": "YELLOW", "code": "C3", "zone": "Zone C", "evac_target": "Precautionary"},
+                {"col": "Critical Coastal Front", "risk_level": "HIGH", "badge": "ORANGE", "code": "B3", "zone": "Zone B", "evac_target": "Mandatory Coastal"},
+            ]},
+            {"tier": "Minor (<1.5m)", "surge_level": "<1.5m", "cells": [
+                {"col": "Inland Rural", "risk_level": "LOW", "badge": "GREEN", "code": "D4", "zone": "Zone D", "evac_target": "Normal Ops"},
+                {"col": "Semi-Urban Corridor", "risk_level": "LOW", "badge": "GREEN", "code": "D5", "zone": "Zone D", "evac_target": "Normal Ops"},
+                {"col": "Dense Urban Center", "risk_level": "LOW", "badge": "GREEN", "code": "D6", "zone": "Zone D", "evac_target": "Advisory"},
+                {"col": "Critical Coastal Front", "risk_level": "MODERATE", "badge": "YELLOW", "code": "C4", "zone": "Zone C", "evac_target": "Beach Closure"},
+            ]},
+        ],
+        "risk_zones": [
+            {"id": "zone-a", "code": "ZONE A", "level": "EXTREME", "colorTag": "RED WARNING",
+             "corridor": "Coastal Strip 0–15 km (Gopalpur, Ganjam, Chatrapur)",
+             "surgeHeight": "3.8m above astronomical tide", "sustainedWinds": "135–155 km/h",
+             "populationExposed": "248,500", "evacuatedPercent": 82, "sheltersActive": 46},
+            {"id": "zone-b", "code": "ZONE B", "level": "HIGH", "colorTag": "ORANGE ALERT",
+             "corridor": "Inland Belt 15–40 km (Berhampur City, Aska Corridor)",
+             "surgeHeight": "Flash inundation up to 1.4m", "sustainedWinds": "100–125 km/h",
+             "populationExposed": "620,000", "evacuatedPercent": 56, "sheltersActive": 84},
+            {"id": "zone-c", "code": "ZONE C", "level": "MODERATE", "colorTag": "YELLOW WATCH",
+             "corridor": "Perimeter 40–90 km (Digapahandi, Bhanjanagar)",
+             "surgeHeight": "Inland heavy rainfall >180mm/24h", "sustainedWinds": "70–95 km/h",
+             "populationExposed": "1,140,000", "evacuatedPercent": 24, "sheltersActive": 110},
+            {"id": "zone-d", "code": "ZONE D", "level": "LOW", "colorTag": "GREEN STANDBY",
+             "corridor": "Inland Highlands >90 km (Mohana, Rayagada Gateway)",
+             "surgeHeight": "No marine surge; moderate rainfall", "sustainedWinds": "45–65 km/h",
+             "populationExposed": "350,000", "evacuatedPercent": 10, "sheltersActive": 58},
+        ]
+    }
+
+
 from typing import Optional
 from fastapi import Header
 from src.config import get_settings

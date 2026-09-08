@@ -30,10 +30,16 @@ import threading
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import yaml
 
 from .contracts import CorrelationVerdict
+
+try:
+    import numpy as np
+    HAS_ML = True
+except ImportError:
+    HAS_ML = False
+    np = None
 
 logger = logging.getLogger("pukar.ml.correlate")
 
