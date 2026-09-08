@@ -26,22 +26,32 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     """
     Lifecycle manager for the FastAPI application.
-    Executes database schema creation on startup.
+    DB init and seeding are best-effort — failures are logged but never crash
+    the app. This is critical for Vercel serverless where:
+      - The filesystem is read-only (SQLite will fail → gracefully degrade)
+      - Concurrent cold starts can race on CREATE TABLE (idempotent DDL handles it)
+      - DATABASE_URL may not be set in every env
     """
-    logger.info("Initializing Database...")
-    await init_db()
-    logger.info("Database initialized successfully.")
-    
-    logger.info("Seeding Chakravyooh Demo Zones...")
-    async with async_session_maker() as db:
-        await seed_demo_zones(db)
-    
-    # Check keys configured
-    if settings.ENVIRONMENT.lower() != "production":
-        logger.info("Running in DEVELOPMENT mode.")
-    
+    try:
+        logger.info("Initializing Database...")
+        await init_db()
+        logger.info("Database initialized successfully.")
+    except Exception as e:
+        logger.warning("DB init failed (non-fatal on Vercel/read-only fs): %s", e)
+
+    try:
+        logger.info("Seeding Chakravyooh demo zones and users...")
+        async with async_session_maker() as db:
+            await seed_demo_zones(db)
+        logger.info("Seeding complete.")
+    except Exception as e:
+        logger.warning("Seeding failed (non-fatal): %s", e)
+
+    mode = "REMOTE/Groq" if settings.GROQ_API_KEY else "LOCAL/Native-ML"
+    logger.info("Pukar backend live — mode=%s env=%s", mode, settings.ENVIRONMENT)
+
     yield
-    
+
     logger.info("Shutting down Pukar backend...")
 
 app = FastAPI(

@@ -27,4 +27,17 @@ async def seed_demo_zones(db: AsyncSession):
             )
             db.add(z)
             
+    # Seed demo users for judges
+    demo_users = [
+        {"email": "admin@chakravyooh.in", "role": RoleEnum.SUPER_ADMIN.value, "pass": "admin123"},
+        {"email": "commander@chakravyooh.in", "role": RoleEnum.COMMANDER.value, "pass": "commander123"},
+        {"email": "analyst@chakravyooh.in", "role": RoleEnum.ANALYST.value, "pass": "analyst123"}
+    ]
+    for du in demo_users:
+        existing_user = (await db.execute(select(User).where(User.email == du["email"]))).scalars().first()
+        if not existing_user:
+            hashed_pw = bcrypt.hashpw(du["pass"].encode(), bcrypt.gensalt()).decode()
+            u = User(email=du["email"], hashed_password=hashed_pw, role=du["role"], is_active=True)
+            db.add(u)
+
     await db.commit()

@@ -1,7 +1,11 @@
 import re
 
-import nacl.encoding
-import nacl.public
+try:
+    import nacl.encoding
+    import nacl.public
+    HAS_NACL = True
+except ImportError:
+    HAS_NACL = False
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,7 +49,7 @@ async def register_keys(
 ):
     """
     Registers a device's public keypair during onboarding.
-    Requires a valid JWT — prevents anonymous key poisoning of the trust anchor.
+    Requires a valid JWT ??? prevents anonymous key poisoning of the trust anchor.
     The `origin_key_id` becomes the trust anchor for verifying SOS packets.
     """
     await register_device_keys(
@@ -73,3 +77,5 @@ async def get_backend_pubkey():
     pub_key_hex = private_key.public_key.encode(encoder=nacl.encoding.HexEncoder).decode('utf-8')
 
     return {"backend_x25519_public_key": pub_key_hex}
+
+
