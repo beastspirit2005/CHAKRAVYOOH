@@ -1,0 +1,11 @@
+{
+  "remoteName": "origin",
+  "projects": [
+    {
+      "id": "prj_0D2vDmRlxr7DWGZZZRLigDLyuHFm",
+      "name": "sos-beacon",
+      "directory": ".",
+      "orgId": "team_z88Q79gQem7F5LKcD2P52vnA"
+    }
+  ]
+}
