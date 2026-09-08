@@ -241,11 +241,14 @@ _FRONTEND_DIR = _REPO_ROOT / "frontend"
 @app.get("/portal", include_in_schema=False)
 @app.get("/", include_in_schema=False)
 async def serve_portal():
-    """Serve Arnav's Command Center UI."""
-    html_file = _FRONTEND_DIR / "index.html"
-    if html_file.exists():
-        return FileResponse(str(html_file), media_type="text/html")
-    return {"error": "Frontend not built. Run: git checkout upstream/Frontend-A -- index.html static/ && mkdir -p frontend && mv index.html frontend/ && mv static frontend/"}
+    """Serve Chakravyooh Command Center UI."""
+    for candidate in [
+        _FRONTEND_DIR / "static" / "index.html",
+        _FRONTEND_DIR / "index.html",
+    ]:
+        if candidate.exists():
+            return FileResponse(str(candidate), media_type="text/html")
+    return {"error": "Frontend not found."}
 
 
 # Mount /static AFTER defining API routes so /api/v1 is never shadowed.
