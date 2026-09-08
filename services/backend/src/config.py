@@ -2,7 +2,14 @@ import logging
 import secrets
 from functools import lru_cache
 
-try:\n    import nacl.encoding\n    import nacl.public\n    HAS_NACL = True\nexcept ImportError:\n    HAS_NACL = False\nfrom pydantic import field_validator
+try:
+    import nacl.encoding
+    import nacl.public
+    HAS_NACL = True
+except ImportError:
+    HAS_NACL = False
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
